@@ -18,6 +18,7 @@ type Journey struct {
 	errors []error
 }
 
+// a channel that holds the journies that should be vacuumed
 var vacuum = make(chan *Journey)
 
 func main() {
@@ -25,6 +26,7 @@ func main() {
 	http.HandleFunc("/api/journey", CreateJourney)
 	http.HandleFunc("/api/state", GetState)
 
+	// a non-blocking function that runs when there is any jounies to vacuum
 	go func() {
 		for j := range vacuum {
 			log.Println("vacuum ran")
