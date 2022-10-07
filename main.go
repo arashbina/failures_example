@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"failures_example/logic"
 	"fmt"
 	"github.com/google/uuid"
+	"log"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -18,34 +18,30 @@ type Journey struct {
 	errors []error
 }
 
-var vacuum = make(chan Journey)
+var vacuum = make(chan *Journey)
 
 func main() {
 
 	http.HandleFunc("/api/journey", CreateJourney)
 	http.HandleFunc("/api/state", GetState)
 
-	ticker := time.NewTicker(2 * time.Second)
-	done := make(chan bool)
 	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				for j := range vacuum {
-					if j.TryLock() {
-						defer j.Unlock()
-						var notClean bool
-						for _, r := range j.rules {
-							if err := logic.Delete(r); err != nil {
-								notClean = true
-							}
-						}
-						if notClean {
-							vacuum <- j
-						}
+		for j := range vacuum {
+			log.Println("vacuum ran")
+			if j.TryLock() {
+				defer j.Unlock()
+				log.Println("journey locked and will vacuum")
+				defer j.Unlock()
+				var notClean bool
+				for _, r := range j.rules {
+					if err := logic.Delete(r); err != nil {
+						notClean = true
 					}
+				}
+				if notClean {
+					vacuum <- j
+				} else {
+					log.Println("vacuumed journies")
 				}
 			}
 		}
@@ -60,15 +56,19 @@ func CreateJourney(w http.ResponseWriter, r *http.Request) {
 
 	j := Journey{}
 
+	// create a random number of rules for this journey
 	num := r1.Intn(5)
-	fmt.Printf("will create %d rules\n", num)
+	log.Printf("will create %d rules for this journey\n", num)
 
+	// lock the journey so that no one else can modify it
 	j.Lock()
 	defer j.Unlock()
 
 	for i := 0; i < num; i++ {
 		r, err := logic.CreateRule()
 		if err != nil {
+			// add the error to the slice of errors
+			// and mark the journey to be vacuumed
 			j.errors = append(j.errors, err)
 			j.vacuum = true
 			continue
@@ -77,18 +77,21 @@ func CreateJourney(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if j.vacuum {
-		vacuum <- j
+		// add the journey to the vacuum channel
+		vacuum <- &j
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(j.errors)
+		log.Printf("errors: %v\n", j.errors)
+		w.Write([]byte("failed creating journey"))
 		return
 	}
 
-	fmt.Println("create the journey")
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("created journey successfully"))
 }
 
 func GetState(w http.ResponseWriter, r *http.Request) {
+	// return the number of journies that will get vacuumed
 	s := fmt.Sprintf("number of items to be vacuumed: %d", len(vacuum))
 	w.Write([]byte(s))
 	w.WriteHeader(http.StatusOK)
