@@ -12,8 +12,8 @@ import (
 )
 
 type Journey struct {
-	rules  []uuid.UUID
-	vacuum bool
+	rulesToVacuum []uuid.UUID
+	vacuum        bool
 	sync.RWMutex
 	errors []error
 }
@@ -35,7 +35,7 @@ func main() {
 				log.Println("journey locked and will vacuum")
 				defer j.Unlock()
 				var notClean bool
-				for _, r := range j.rules {
+				for _, r := range j.rulesToVacuum {
 					if err := logic.Delete(r); err != nil {
 						notClean = true
 					}
@@ -45,6 +45,8 @@ func main() {
 				} else {
 					log.Println("vacuumed journies")
 				}
+			} else {
+				vacuum <- j
 			}
 		}
 	}()
@@ -75,16 +77,18 @@ func CreateJourney(w http.ResponseWriter, r *http.Request) {
 			j.vacuum = true
 			continue
 		}
-		j.rules = append(j.rules, r)
+		// add rules we created incase we need to vacuum this journey
+		// the failed rule does not need to be deleted
+		j.rulesToVacuum = append(j.rulesToVacuum, r)
 	}
 
 	if j.vacuum {
 		// add the journey to the vacuum channel
 		vacuum <- &j
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
 		log.Printf("errors: %v\n", j.errors)
-		w.Write([]byte("failed creating journey"))
+		// return failure and errors if needed
+		http.Error(w, "failed creating journey", http.StatusUnprocessableEntity)
 		return
 	}
 

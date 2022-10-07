@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"log"
 	"math/rand"
 	"time"
 )
@@ -16,13 +17,14 @@ func CreateRule() (uuid.UUID, error) {
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
 
+	u := uuid.New()
+
 	// randomly fail this rule creation in 10% of the cases
 	if a := r1.Intn(100); a < 10 {
-		e := fmt.Sprintf("failed: %d", a)
+		e := fmt.Sprintf("failed creation of rule with id: %s", u)
 		return uuid.UUID{}, errors.New(e)
 	}
 
-	u := uuid.New()
 	storage[u] = true
 
 	return u, nil
@@ -38,5 +40,6 @@ func Delete(u uuid.UUID) error {
 	}
 
 	delete(storage, u)
+	log.Printf("deleted a rule with id: %s\n", u)
 	return nil
 }
