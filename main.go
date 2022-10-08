@@ -31,16 +31,19 @@ func main() {
 		for j := range vacuum {
 			log.Println("vacuum ran")
 			if j.TryLock() {
-				defer j.Unlock()
 				log.Println("journey locked and will vacuum")
 				defer j.Unlock()
 				var notClean bool
+				var rem []uuid.UUID
 				for _, r := range j.rulesToVacuum {
 					if err := logic.Delete(r); err != nil {
 						notClean = true
 					}
+					//remove the rule
+					rem = append(rem, r)
 				}
 				if notClean {
+					j.rulesToVacuum = rem
 					vacuum <- j
 				} else {
 					log.Println("vacuumed journies")
