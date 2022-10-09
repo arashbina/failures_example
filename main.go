@@ -38,9 +38,8 @@ func main() {
 				for _, r := range j.rulesToVacuum {
 					if err := logic.Delete(r); err != nil {
 						notClean = true
+						rem = append(rem, r)
 					}
-					//remove the rule
-					rem = append(rem, r)
 				}
 				if notClean {
 					j.rulesToVacuum = rem
